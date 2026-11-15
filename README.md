@@ -1,92 +1,52 @@
-# Installation
+# Soloist for Home Assistant
 
-Copy `custom_components/soloist` into `<ha_installation>/config/custom_components/soloist`.
+Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, restart Home Assistant, then add **Soloist** under **Settings → Devices & services**. Automatic Spotify Connect mDNS discovery is supported; manual host/port setup is also available.
 
-# Album Artwork Lighting
+## Album artwork lighting
 
-Automatically match a room's lights to the dominant color of the album artwork playing on Soloist.
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes an **Album colour** sensor with a hex state (`#rrggbb`) and `rgb_color` attribute.
 
-## 1. Install ColorExtractor
-
-Home Assistant → Settings → Devices & services → Add integration → **ColorExtractor**.
-
-## 2. Allow Spotify artwork URLs
-
-Add to `configuration.yaml` (merge with any existing `homeassistant:` section):
-
-```yaml
-homeassistant:
-  allowlist_external_urls:
-    - "https://i.scdn.co/image/"
-```
-
-Restart Home Assistant.
-
-## 3. Create an automation
-
-Settings → Automations & scenes → Create automation → Edit in YAML:
+Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
 ```yaml
 alias: Soloist — Album Artwork Lighting
 triggers:
   - trigger: state
-    entity_id: media_player.ROOM_DEVICE_soloist
-    attribute: entity_picture
+    entity_id: sensor.YOUR_SOLOIST_ALBUM_COLOUR
   - trigger: state
-    entity_id: media_player.ROOM_DEVICE_soloist
+    entity_id: media_player.YOUR_SOLOIST
     to: playing
 conditions:
   - condition: state
-    entity_id: media_player.ROOM_DEVICE_soloist
+    entity_id: media_player.YOUR_SOLOIST
     state: playing
   - condition: template
     value_template: >
-      {{ (state_attr('media_player.ROOM_DEVICE_soloist',
-      'entity_picture') or '').startswith('https://i.scdn.co/image/') }}
+      {{ (state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') or []) | count == 3 }}
 actions:
-  - action: color_extractor.turn_on
+  - action: light.turn_on
     target:
-      area_id: AREA_ID
+      area_id: YOUR_AREA_ID
     data:
-      color_extract_url: >
-        {{ state_attr('media_player.ROOM_DEVICE_soloist',
-        'entity_picture') }}
+      rgb_color: "{{ state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') }}"
       transition: 3
 mode: restart
 ```
 
-Replace `entity_id` with your Soloist player and `area_id` with your room's ID (or use `entity_id: light.your_light`).
+Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
 
-**Note:** Lights must support RGB. The automation turns on targeted lights, including those previously off. It runs when artwork changes or playback starts.
+Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
+## mDNS discovery and firewall
 
-# mDNS Discovery
+Discovery uses `_spotify-connect._tcp.local.` (UDP 5353). Home Assistant then requests Spotify Connect HTTP `getInfo` on the **dynamically advertised TCP port**, and uses Soloist WebSocket TCP 9090 (or your configured port) for playback.
 
-Soloist is automatically discovered through Spotify Connect mDNS (`_spotify-connect._tcp.local.`).
-
-Discovery requires:
-- **UDP 5353:** mDNS advertisements.
-- **Dynamic TCP port:** Spotify Connect HTTP `getInfo` (changes after restart).
-- **TCP 9090:** Soloist WebSocket (or your configured port).
-
-## Linux / UFW
-
-On the **Soloist host**, allow connections from Home Assistant:
+On the **Soloist host**, a UFW rule permitting all TCP ports **only from the Home Assistant IP** allows discovery despite the dynamic HTTP port:
 
 ```bash
 sudo ufw allow from <HA_IP> to any proto tcp
 ```
 
-This permits access to both the dynamic HTTP port and WebSocket. **Note:** It also grants HA access to other TCP services on the host.
+This also grants HA access to other TCP services on that host; use a narrower rule if the ZeroConf HTTP port is fixed. Soloist's WebSocket must listen on a network interface, e.g. `--ws 0.0.0.0:9090` rather than `127.0.0.1:9090`. Keep UFW enabled and never expose the unauthenticated WebSocket to the Internet.
 
-Ensure Soloist listens on the network, not just localhost:
-
-```bash
---ws 0.0.0.0:9090
-```
-
-Keep your firewall enabled. Do not expose Soloist's **unauthenticated** WebSocket to the Internet.
-
-If mDNS works but Soloist isn't discovered, verify that Home Assistant can reach the HTTP `getInfo` port advertised in its **Zeroconf Browser**.
-
-**You can also just skip all of this add your device manually with Home Assistant → Settings → Devices & services → Add integration → Soloist.**
+Use manual configuration for less hustle.
