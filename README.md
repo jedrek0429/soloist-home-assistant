@@ -1,3 +1,6 @@
+# Installation
+
+Copy `custom_components/soloist` into `<ha_installation>/config/custom_components/soloist`.
 
 # Album Artwork Lighting
 
