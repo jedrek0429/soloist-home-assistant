@@ -10,9 +10,11 @@ Create an automation (**Settings → Automations & scenes → Create automation 
 
 ```yaml
 alias: Soloist — Album Artwork Lighting
+description: Synchronise lights with the Soloist player album cover colour
 triggers:
   - trigger: state
     entity_id: sensor.YOUR_SOLOIST_ALBUM_COLOUR
+    attribute: rgb_color
   - trigger: state
     entity_id: media_player.YOUR_SOLOIST
     to: playing
@@ -20,20 +22,24 @@ conditions:
   - condition: state
     entity_id: media_player.YOUR_SOLOIST
     state: playing
-  - condition: template
-    value_template: >
-      {{ (state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') or []) | count == 3 }}
 actions:
+  - variables:
+      album_rgb: >-
+        {{ state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') }}
+  - condition: template
+    value_template: "{{ album_rgb is not none }}"
+  - delay:
+      milliseconds: 1500
   - action: light.turn_on
     target:
       area_id: YOUR_AREA_ID
     data:
-      rgb_color: "{{ state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') }}"
+      rgb_color: "{{ album_rgb }}"
       transition: 3
 mode: restart
 ```
 
-Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
+Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
 
 Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
