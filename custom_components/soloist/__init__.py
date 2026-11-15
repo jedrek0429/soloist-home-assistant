@@ -12,7 +12,7 @@ from homeassistant.helpers.aiohttp_client import (
 from .client import SoloistClient
 from .const import CONF_HOST, CONF_PORT
 
-PLATFORMS = [Platform.MEDIA_PLAYER]
+PLATFORMS = [Platform.MEDIA_PLAYER, Platform.SENSOR]
 
 type SoloistConfigEntry = ConfigEntry[SoloistClient]
 
@@ -22,7 +22,6 @@ async def async_update_entry(
     entry: SoloistConfigEntry,
 ) -> None:
     """Reload the integration when its configuration changes."""
-
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -31,7 +30,6 @@ async def async_setup_entry(
     entry: SoloistConfigEntry,
 ) -> None:
     """Set up Soloist from a configuration entry."""
-
     url = URL.build(
         scheme="ws",
         host=entry.data[CONF_HOST],
@@ -44,7 +42,6 @@ async def async_setup_entry(
     )
 
     entry.runtime_data = client
-
     await client.connect()
 
     try:
@@ -64,10 +61,8 @@ async def async_unload_entry(
     entry: SoloistConfigEntry,
 ) -> None:
     """Unload the Soloist integration."""
-
     await hass.config_entries.async_unload_platforms_or_raise(
         entry,
         PLATFORMS,
     )
-
     await entry.runtime_data.disconnect()
