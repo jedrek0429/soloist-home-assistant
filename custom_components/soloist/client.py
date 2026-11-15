@@ -1,8 +1,12 @@
+"""Asynchronous WebSocket client for Spotify Soloist."""
+
 import asyncio
 import json
 import logging
+
 from collections.abc import Callable
 from contextlib import suppress
+from datetime import datetime, timezone
 from typing import Any
 
 from aiohttp import (
@@ -12,15 +16,17 @@ from aiohttp import (
     WSMsgType,
 )
 
-from state import SoloistState
+from .models import PlaybackState
+from .state import SoloistState
 
 _LOGGER = logging.getLogger(__name__)
 
-StateListener = Callable[[], None]
-EventListener = Callable[[dict[str, Any]], None]
+Listener = Callable[[], None]
 
 
 class SoloistClient:
+    """Maintain a persistent connection to Soloist."""
+
     def __init__(
         self,
         session: ClientSession,
@@ -37,8 +43,9 @@ class SoloistClient:
         self._connected = False
         self._ready = asyncio.Event()
 
-        self._listeners: set[StateListener] = set()
-        self._event_listeners: set[EventListener] = set()
+        self._listeners: set[Listener] = set()
+
+        self.position_updated_at: datetime | None = None
 
     @property
     def connected(self) -> bool:
@@ -49,38 +56,29 @@ class SoloistClient:
         return self._ready.is_set()
 
     @property
-    def playback(self):
+    def playback(self) -> PlaybackState | None:
         return self.state.last_published
 
     def subscribe(
         self,
-        callback: StateListener,
+        callback: Listener,
     ) -> Callable[[], None]:
-        self._listeners.add(callback)
-        return lambda: self._listeners.discard(callback)
+        """Subscribe to changes, returning an unsubscribe callback."""
 
-    def subscribe_events(
-        self,
-        callback: EventListener,
-    ) -> Callable[[], None]:
-        self._event_listeners.add(callback)
-        return lambda: self._event_listeners.discard(callback)
+        self._listeners.add(callback)
+
+        return lambda: self._listeners.discard(callback)
 
     def _notify(self) -> None:
         for listener in tuple(self._listeners):
             try:
                 listener()
             except Exception:
-                _LOGGER.exception("State listener failed")
-
-    def _notify_event(self, event: dict[str, Any]) -> None:
-        for listener in tuple(self._event_listeners):
-            try:
-                listener(event)
-            except Exception:
-                _LOGGER.exception("Event listener failed")
+                _LOGGER.exception("Soloist listener failed")
 
     async def connect(self) -> None:
+        """Start the background connection task."""
+
         if self._task is not None and not self._task.done():
             return
 
@@ -90,6 +88,8 @@ class SoloistClient:
         )
 
     async def disconnect(self) -> None:
+        """Stop the background task and close the socket."""
+
         if self._task is None:
             return
 
@@ -101,47 +101,114 @@ class SoloistClient:
 
         self._task = None
 
-    async def wait_ready(self, timeout: float = 5.0) -> None:
+    async def wait_ready(
+        self,
+        timeout: float = 5.0,
+    ) -> None:
+        """Wait for a recognized Soloist state event."""
+
         await asyncio.wait_for(
             self._ready.wait(),
-            timeout=timeout,
+            timeout,
         )
 
-    async def get_state(self) -> None:
-        if self._ws is None or self._ws.closed:
-            raise ConnectionError("Soloist is not connected")
+    async def send_command(
+        self,
+        command: str,
+        **fields: Any,
+    ) -> None:
+        """Send a command over the current WebSocket."""
 
-        await self._ws.send_json(
+        ws = self._ws
+
+        if ws is None or ws.closed:
+            raise ConnectionError("Soloist is disconnected")
+
+        await ws.send_json(
             {
                 "type": "command",
-                "command": "get_state",
+                "command": command,
+                **fields,
             }
         )
 
+    async def get_state(self) -> None:
+        await self.send_command("get_state")
+
+    async def get_queue(self, limit: int = 10) -> None:
+        await self.send_command(
+            "get_queue",
+            limit=limit,
+        )
+
     def _handle_event(self, event: dict[str, Any]) -> None:
+        """Process a received Soloist event."""
+
         kind = event.get("type")
 
-        updated = self.state.apply(event)
+        if kind == "error":
+            _LOGGER.warning(
+                "Soloist API error: %s",
+                event.get("message"),
+            )
+            return
 
-        self._notify_event(event)
+        if kind == "device_changed":
+            for key in ("is_active", "device_name"):
+                if key in event:
+                    self.state.auth[key] = event[key]
 
-        if (kind == "auth_state" and isinstance(event.get("logged_in"), bool)) or (
-            kind == "playback_state" and "status" in event
-        ):
-            self._ready.set()
-
-        if updated is not None or kind in (
-            "auth_state",
-            "queue_changed",
-        ):
             self._notify()
+            return
+
+        if kind not in {
+            "auth_state",
+            "playback_state",
+            "track_changed",
+            "playback_changed",
+            "position_sync",
+            "position_changed",
+            "volume_changed",
+            "options_changed",
+            "context_changed",
+            "queue_changed",
+        }:
+            return
+
+        self.state.apply(event)
+
+        if kind == "auth_state":
+            if isinstance(event.get("logged_in"), bool):
+                self._ready.set()
+
+        if kind == "playback_state":
+            if isinstance(event.get("status"), str):
+                self._ready.set()
+
+        if kind in {
+            "playback_state",
+            "position_sync",
+            "position_changed",
+        }:
+            if isinstance(
+                self.state.playback.get("position"),
+                dict,
+            ):
+                self.position_updated_at = datetime.now(timezone.utc)
+
+        self._notify()
 
     async def _run(self) -> None:
+        """Connect, receive events and reconnect on failure."""
+
         retry = 1.0
 
         while True:
             try:
-                _LOGGER.info("Connecting to %s", self.url)
+                _LOGGER.info(
+                    "Connecting to Soloist at %s",
+                    self.url,
+                )
 
                 async with asyncio.timeout(5):
                     ws = await self._session.ws_connect(
@@ -152,6 +219,8 @@ class SoloistClient:
                 async with ws:
                     self._ws = ws
                     self._connected = True
+                    self._ready.clear()
+
                     self._notify()
 
                     await self.get_state()
@@ -163,18 +232,14 @@ class SoloistClient:
                             try:
                                 event = json.loads(message.data)
                             except json.JSONDecodeError:
-                                _LOGGER.warning("Invalid JSON from Soloist")
+                                _LOGGER.warning("Invalid Soloist JSON")
                                 continue
 
-                            if not isinstance(event, dict):
-                                continue
-
-                            self._handle_event(event)
+                            if isinstance(event, dict):
+                                self._handle_event(event)
 
                         elif message.type == WSMsgType.ERROR:
                             raise ConnectionError(str(ws.exception()))
-
-                    _LOGGER.warning("Soloist connection closed")
 
             except asyncio.CancelledError:
                 raise
@@ -183,10 +248,10 @@ class SoloistClient:
                 ClientError,
                 OSError,
                 ConnectionError,
-                asyncio.TimeoutError,
+                TimeoutError,
             ) as error:
                 _LOGGER.warning(
-                    "Soloist connection error: %s",
+                    "Soloist connection failed: %s",
                     error,
                 )
 
@@ -198,12 +263,13 @@ class SoloistClient:
                 self._connected = False
                 self._ready.clear()
 
-                # Never expose stale playback after disconnect.
                 self.state = SoloistState()
+                self.position_updated_at = None
+
                 self._notify()
 
             _LOGGER.info(
-                "Reconnecting in %.1f seconds",
+                "Reconnecting to Soloist in %.1f seconds",
                 retry,
             )
 

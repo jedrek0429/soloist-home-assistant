@@ -1,6 +1,8 @@
+"""Merge Soloist WebSocket events into playback state."""
+
 from typing import Any
 
-from models import PlaybackState
+from .models import PlaybackState
 
 EVENT_FIELDS = {
     "track_changed": "item",
@@ -14,13 +16,20 @@ EVENT_FIELDS = {
 
 
 class SoloistState:
+    """Store the latest complete Soloist state."""
+
     def __init__(self) -> None:
         self.playback: dict[str, Any] = {}
         self.auth: dict[str, Any] = {}
         self.queue: dict[str, Any] = {}
         self.last_published: PlaybackState | None = None
 
-    def apply(self, event: dict[str, Any]) -> PlaybackState | None:
+    def apply(
+        self,
+        event: dict[str, Any],
+    ) -> PlaybackState | None:
+        """Apply one WebSocket event."""
+
         kind = event.get("type")
 
         if not isinstance(kind, str):
@@ -28,6 +37,11 @@ class SoloistState:
 
         if kind == "auth_state":
             self.auth = dict(event)
+
+            if event.get("logged_in") is False:
+                self.playback.clear()
+                self.last_published = None
+
             return None
 
         if kind == "queue_changed":
@@ -52,6 +66,7 @@ class SoloistState:
             return None
 
         if not self.playback.get("item"):
+            self.last_published = None
             return None
 
         state = PlaybackState.from_event(self.playback)

@@ -2,21 +2,35 @@
     "config": {
         "step": {
             "user": {
-                "title": "Connect to Soloist",
-                "description": "Enter the IP address or hostname of the machine running Soloist and its WebSocket port. The default port is 9090.",
+                "title": "Połącz z Soloist",
+                "description": "Podaj adres komputera z Soloist oraz port WebSocket. Domyślny port to 9090.",
                 "data": {
-                    "host": "Host or IP address",
-                    "port": "WebSocket port"
+                    "host": "Host lub adres IP",
+                    "port": "Port WebSocket"
+                }
+            },
+            "confirm": {
+                "title": "Dodaj {device_name}",
+                "description": "Home Assistant wykrył urządzenie **{device_name}** pod adresem `{host}` i pomyślnie połączył się z WebSocket na porcie `{port}`. Potwierdź dodanie urządzenia."
+            },
+            "troubleshoot": {
+                "title": "Wykryto Soloist — brak połączenia WebSocket",
+                "description": "Home Assistant wykrył **{device_name}** pod adresem `{host}` przez Spotify Connect, ale nie może połączyć się z jego WebSocket.\n\n**1. Włącz nasłuch sieciowy**\nNa komputerze z Soloist ustaw `--ws 0.0.0.0:{port}` zamiast `--ws 127.0.0.1:{port}`. Po zmianie konfiguracji zrestartuj Soloist.\n\n**2. Sprawdź firewall**\nNa Linuksie z UFW zezwól na połączenia TCP z Home Assistant:\n`sudo ufw allow from HA_IP to any port {port} proto tcp`\nZastąp `HA_IP` adresem IP serwera Home Assistant.\n\n**3. Ponów próbę**\nJeśli korzystasz z innego portu WebSocket, wpisz go poniżej. Po zmianie konfiguracji Soloist lub firewalla ponownie wyślij formularz.\n\nAPI WebSocket Soloist nie ma uwierzytelniania. Nie udostępniaj tego portu w Internecie.",
+                "data": {
+                    "port": "Port WebSocket"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Cannot connect to the Soloist WebSocket. Check the host, port, firewall, and listening address. Allow incoming TCP connections from Home Assistant to the configured port.",
-            "invalid_response": "A WebSocket connection was established, but the server did not provide a recognized Soloist response.",
-            "invalid_host": "Enter a valid host or IP address."
+            "cannot_connect": "Nie można połączyć się z Soloist. Sprawdź firewall, port WebSocket i adres nasłuchu. Soloist musi przyjmować połączenia z Home Assistant, a nie tylko z 127.0.0.1.",
+            "invalid_response": "Połączenie zostało nawiązane, ale serwer nie zwrócił rozpoznanego zdarzenia Soloist.",
+            "invalid_host": "Podaj prawidłowy host lub adres IP."
         },
         "abort": {
-            "already_configured": "This Soloist endpoint is already configured."
+            "already_configured": "To urządzenie Soloist jest już skonfigurowane.",
+            "not_soloist": "Wykryte urządzenie Spotify Connect nie jest Soloist.",
+            "missing_device_id": "Wykryte urządzenie Soloist nie udostępniło identyfikatora.",
+            "missing_service_port": "The discovered Spotify Connect service did not provide a port."
         }
     }
 }
