@@ -30,16 +30,30 @@ actions:
     value_template: "{{ album_rgb is not none }}"
   - delay:
       milliseconds: 1500
-  - action: light.turn_on
-    target:
-      area_id: YOUR_AREA_ID
-    data:
-      rgb_color: "{{ album_rgb }}"
-      transition: 3
+  - repeat:
+      for_each: >-
+        {{ expand(area_entities('YOUR_AREA_ID'))
+           | selectattr('domain', 'eq', 'light')
+           | selectattr('state', 'eq', 'on')
+           | selectattr('attributes.brightness', 'defined')
+           | map(attribute='entity_id')
+           | list }}
+      sequence:
+        - variables:
+            original_brightness: "{{ state_attr(repeat.item, 'brightness') }}"
+        - condition: template
+          value_template: "{{ original_brightness is not none }}"
+        - action: light.turn_on
+          target:
+            entity_id: "{{ repeat.item }}"
+          data:
+            rgb_color: "{{ album_rgb }}"
+            brightness: "{{ original_brightness | int }}"
+            transition: 3
 mode: restart
 ```
 
-Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
+Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. The automation changes **only lights that are already on**, explicitly passing each light's current brightness back with the new colour. It leaves off lights untouched and skips lights without a reported brightness. This preserves per-light brightness instead of imposing a single level across the area. Some bulbs may still exhibit a brief brightness shift during their colour transition due to device firmware.
 
 Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
