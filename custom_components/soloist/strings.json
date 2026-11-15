@@ -1,0 +1,22 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Soloist",
+                "description": "Enter the IP address or hostname of the machine running Soloist and its WebSocket port. The default port is 9090.",
+                "data": {
+                    "host": "Host or IP address",
+                    "port": "WebSocket port"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Cannot connect to the Soloist WebSocket. Check the host, port, firewall, and listening address. Allow incoming TCP connections from Home Assistant to the configured port.",
+            "invalid_response": "A WebSocket connection was established, but the server did not provide a recognized Soloist response.",
+            "invalid_host": "Enter a valid host or IP address."
+        },
+        "abort": {
+            "already_configured": "This Soloist endpoint is already configured."
+        }
+    }
+}
