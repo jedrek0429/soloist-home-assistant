@@ -4,7 +4,7 @@ Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, r
 
 ## Album artwork lighting
 
-The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes an **Album colour** sensor with a hex state (`#rrggbb`) and `rgb_color` attribute. No ColorExtractor or URL allowlist is needed.
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes an **Album colour** sensor with a hex state (`#rrggbb`) and `rgb_color` attribute.
 
 Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
@@ -48,3 +48,5 @@ sudo ufw allow from <HA_IP> to any proto tcp
 ```
 
 This also grants HA access to other TCP services on that host; use a narrower rule if the ZeroConf HTTP port is fixed. Soloist's WebSocket must listen on a network interface, e.g. `--ws 0.0.0.0:9090` rather than `127.0.0.1:9090`. Keep UFW enabled and never expose the unauthenticated WebSocket to the Internet.
+
+Use manual configuration for less hustle.
