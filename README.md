@@ -53,7 +53,7 @@ actions:
 mode: restart
 ```
 
-Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. The automation changes **only lights that are already on**, explicitly passing each light's current brightness back with the new colour. It leaves off lights untouched and skips lights without a reported brightness. This preserves per-light brightness instead of imposing a single level across the area. Some bulbs may still exhibit a brief brightness shift during their colour transition due to device firmware.
+Replace the entity IDs and area ID. Only lights already on are updated, without changing their brightness.
 
 Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
