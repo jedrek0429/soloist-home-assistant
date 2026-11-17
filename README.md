@@ -4,13 +4,13 @@ Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, r
 
 ## Album artwork lighting
 
-The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors, each with a hex state (`#rrggbb`) and an `rgb_color` attribute:
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors with a hex state (`#rrggbb`) and `rgb_color` attribute:
 
-- **Album average colour** — alpha-weighted average of the cover's RGB pixels.
-- **Album display colour** — the unmodified Soloist Display accent.
-- **Album lighting colour** — a more saturated, less pastel variation derived from Display (same hue).
+- **Album average colour** — alpha-weighted RGB pixel mean.
+- **Album display colour** — the original Soloist Display accent.
+- **Album lighting colour** — a richer OKLCH transformation of Display, preserving its hue.
 
-All three share a single download, decode and cache. Lighting does not change the bulb's brightness.
+All three are computed from one artwork download and decode. Lighting does not control lamp brightness.
 
 Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
@@ -36,16 +36,30 @@ actions:
     value_template: "{{ album_rgb is not none }}"
   - delay:
       milliseconds: 1500
-  - action: light.turn_on
-    target:
-      area_id: YOUR_AREA_ID
-    data:
-      rgb_color: "{{ album_rgb }}"
-      transition: 3
+  - repeat:
+      for_each: >-
+        {{ expand(area_entities('YOUR_AREA_ID'))
+           | selectattr('domain', 'eq', 'light')
+           | selectattr('state', 'eq', 'on')
+           | selectattr('attributes.brightness', 'defined')
+           | map(attribute='entity_id')
+           | list }}
+      sequence:
+        - variables:
+            original_brightness: "{{ state_attr(repeat.item, 'brightness') }}"
+        - condition: template
+          value_template: "{{ original_brightness is not none }}"
+        - action: light.turn_on
+          target:
+            entity_id: "{{ repeat.item }}"
+          data:
+            rgb_color: "{{ album_rgb }}"
+            brightness: "{{ original_brightness | int }}"
+            transition: 3
 mode: restart
 ```
 
-Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
+Replace the entity IDs and area ID. Only lights already on are updated, without changing their brightness.
 
 All three colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
