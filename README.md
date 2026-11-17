@@ -4,7 +4,13 @@ Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, r
 
 ## Album artwork lighting
 
-The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors, each with a hex state (`#rrggbb`) and `rgb_color` attribute:\n\n- **Album colour** — the existing Soloist Display OKLab accent (unchanged for compatibility).\n- **Album average colour** — alpha-weighted arithmetic mean of artwork RGB pixels.\n- **Album lighting colour** — a richer, less pastel OKLCH transformation of the Display accent, preserving its hue.\n\nAll modes are calculated from a single artwork download and decoded image. Lighting is derived from Display, not a separate dominant-colour selection. The transformation does not control lamp brightness: Home Assistant and the bulb may represent RGB differently at high brightness.
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors, each with a hex state (`#rrggbb`) and an `rgb_color` attribute:
+
+- **Album average colour** — alpha-weighted average of the cover's RGB pixels.
+- **Album display colour** — the unmodified Soloist Display accent.
+- **Album lighting colour** — a more saturated, less pastel variation derived from Display (same hue).
+
+All three share a single download, decode and cache. Lighting does not change the bulb's brightness.
 
 Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
@@ -25,7 +31,7 @@ conditions:
 actions:
   - variables:
       album_rgb: >-
-        {{ state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') }}
+        {{ state_attr('sensor.YOUR_SOLOIST_ALBUM_LIGHTING_COLOUR', 'rgb_color') }}
   - condition: template
     value_template: "{{ album_rgb is not none }}"
   - delay:
