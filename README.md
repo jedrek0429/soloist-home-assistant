@@ -4,7 +4,7 @@ Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, r
 
 ## Album artwork lighting
 
-The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes an **Album colour** sensor with a hex state (`#rrggbb`) and `rgb_color` attribute.
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors, each with a hex state (`#rrggbb`) and `rgb_color` attribute:\n\n- **Album colour** — the existing Soloist Display OKLab accent (unchanged for compatibility).\n- **Album average colour** — alpha-weighted arithmetic mean of artwork RGB pixels.\n- **Album lighting colour** — a richer, less pastel OKLCH transformation of the Display accent, preserving its hue.\n\nAll modes are calculated from a single artwork download and decoded image. Lighting is derived from Display, not a separate dominant-colour selection. The transformation does not control lamp brightness: Home Assistant and the bulb may represent RGB differently at high brightness.
 
 Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
@@ -13,7 +13,7 @@ alias: Soloist — Album Artwork Lighting
 description: Synchronise lights with the Soloist player album cover colour
 triggers:
   - trigger: state
-    entity_id: sensor.YOUR_SOLOIST_ALBUM_COLOUR
+    entity_id: sensor.YOUR_SOLOIST_ALBUM_LIGHTING_COLOUR
     attribute: rgb_color
   - trigger: state
     entity_id: media_player.YOUR_SOLOIST
@@ -41,7 +41,7 @@ mode: restart
 
 Replace the sensor/player IDs with the entities created for your Soloist, and `YOUR_AREA_ID` with your room or target individual RGB-capable light entities. You can also remove the delay. **The automation turns on lights that were off.** To change only lights already on, target those lights in your own automation.
 
-Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
+All three colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
 ## mDNS discovery and firewall
 
