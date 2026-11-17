@@ -1,6 +1,35 @@
 # Soloist for Home Assistant
 
-Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, restart Home Assistant, then add **Soloist** under **Settings → Devices & services**. Automatic Spotify Connect mDNS discovery is supported; manual host/port setup is also available.
+## Install or update
+
+Run from your Home Assistant Docker Compose directory:
+
+```sh
+set -e
+
+mkdir -p config/custom_components
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+git clone --depth 1 --branch main \
+  https://github.com/jedrek0429/soloist-home-assistant.git \
+  "$tmpdir/repo"
+
+test -f "$tmpdir/repo/custom_components/soloist/manifest.json"
+
+cp -a "$tmpdir/repo/custom_components/soloist" \
+  "$tmpdir/soloist"
+
+rm -rf config/custom_components/soloist
+mv "$tmpdir/soloist" config/custom_components/soloist
+
+docker compose restart homeassistant
+```
+
+Adjust `config/` to match your Home Assistant configuration directory and the restart command to match your installation.
+
+For a fresh installation, go to **Settings → Devices & services → Add integration → Soloist** and configure it. For an update, your existing configuration is preserved
 
 ## Album artwork lighting
 
