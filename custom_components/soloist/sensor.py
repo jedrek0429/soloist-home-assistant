@@ -29,7 +29,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Register the artwork colour sensor."""
-    async_add_entities([SoloistArtworkColourSensor(entry, async_get_clientsession(hass))])
+    display = SoloistArtworkColourSensor(entry, async_get_clientsession(hass))
+    async_add_entities([
+        display,
+        SoloistDerivedColourSensor(display, "Average", "average"),
+        SoloistDerivedColourSensor(display, "Lighting", "lighting"),
+    ])
 
 
 class SoloistArtworkColourSensor(SensorEntity):
@@ -59,7 +64,9 @@ class SoloistArtworkColourSensor(SensorEntity):
 
         self._artwork_url: str | None = None
         self._colour: str | None = None
-        self._cache: OrderedDict[str, str] = OrderedDict()
+        self._cache: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
+        self._colours: tuple[str, str, str] | None = None
+        self._derived: list[SoloistDerivedColourSensor] = []
         self._task: asyncio.Task[None] | None = None
         self._was_available = False
 
@@ -117,11 +124,13 @@ class SoloistArtworkColourSensor(SensorEntity):
             self._task = None
 
         self._colour = None
+        self._colours = None
         if url is not None and url in self._cache:
             self._cache.move_to_end(url)
-            self._colour = self._cache[url]
+            self._colours = self._cache[url]
+            self._colour = self._colours[1]
 
-        self.async_write_ha_state()
+        self._publish()
 
         if url is not None and self._colour is None:
             self._task = self._entry.async_create_task(
@@ -141,5 +150,49 @@ class SoloistArtworkColourSensor(SensorEntity):
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)
 
-        self._colour = colour
+        self._colours = colour
+        self._colour = colour[1]
+        self._publish()
+
+
+    @callback
+    def _publish(self) -> None:
         self.async_write_ha_state()
+        for entity in self._derived:
+            if entity.hass is not None:
+                entity.async_write_ha_state()
+
+
+class SoloistDerivedColourSensor(SensorEntity):
+    """A colour mode backed by the same artwork fetch and cache."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:palette"
+
+    def __init__(self, source: SoloistArtworkColourSensor, name: str, mode: str) -> None:
+        self._source = source
+        self._index = {"average": 0, "lighting": 2}[mode]
+        self._attr_name = f"Album {name.lower()} colour"
+        self._attr_unique_id = f"{source.unique_id}_{mode}"
+        self._attr_device_info = source.device_info
+        source._derived.append(self)
+
+    @property
+    def available(self) -> bool:
+        return self._source.available
+
+    @property
+    def native_value(self) -> str | None:
+        colours = self._source._colours
+        return colours[self._index] if colours else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        colour = self.native_value
+        if not colour:
+            return {}
+        return {
+            "rgb_color": list(rgb_from_hex(colour)),
+            "artwork_url": self._source._artwork_url,
+        }
