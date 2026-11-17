@@ -89,6 +89,8 @@ class SoloistArtworkColourSensor(SensorEntity):
         if self._index == 0:
             self.async_on_remove(self._client.subscribe(self._on_client_update))
             self._on_client_update()
+        else:
+            self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         if self._index == 0 and self._task is not None:
