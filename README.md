@@ -4,7 +4,13 @@ Copy `custom_components/soloist` into `<HA_CONFIG>/custom_components/soloist`, r
 
 ## Album artwork lighting
 
-The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes an **Album colour** sensor with a hex state (`#rrggbb`) and `rgb_color` attribute.
+The integration extracts a perceptual accent colour from Spotify album artwork using the OKLab/OKLCH algorithm from [Soloist Display](https://github.com/jedrek0429/soloist-display/blob/alpha/v1.1.0/src/backdrop-colour.js). It exposes three sensors with a hex state (`#rrggbb`) and `rgb_color` attribute:
+
+- **Album average colour** — alpha-weighted RGB pixel mean.
+- **Album display colour** — the original Soloist Display accent.
+- **Album lighting colour** — a richer OKLCH transformation of Display, preserving its hue.
+
+All three are computed from one artwork download and decode. Lighting does not control lamp brightness.
 
 Create an automation (**Settings → Automations & scenes → Create automation → Edit in YAML**):
 
@@ -13,7 +19,7 @@ alias: Soloist — Album Artwork Lighting
 description: Synchronise lights with the Soloist player album cover colour
 triggers:
   - trigger: state
-    entity_id: sensor.YOUR_SOLOIST_ALBUM_COLOUR
+    entity_id: sensor.YOUR_SOLOIST_ALBUM_LIGHTING_COLOUR
     attribute: rgb_color
   - trigger: state
     entity_id: media_player.YOUR_SOLOIST
@@ -25,7 +31,7 @@ conditions:
 actions:
   - variables:
       album_rgb: >-
-        {{ state_attr('sensor.YOUR_SOLOIST_ALBUM_COLOUR', 'rgb_color') }}
+        {{ state_attr('sensor.YOUR_SOLOIST_ALBUM_LIGHTING_COLOUR', 'rgb_color') }}
   - condition: template
     value_template: "{{ album_rgb is not none }}"
   - delay:
@@ -55,7 +61,7 @@ mode: restart
 
 Replace the entity IDs and area ID. Only lights already on are updated, without changing their brightness.
 
-Colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
+All three colours are calculated only when the artwork URL changes, cached (64 covers), and cleared when the player disconnects. Only HTTPS artwork from `i.scdn.co/image/` is downloaded, with redirects, transfer size and decoded size restricted. Image decoding runs outside Home Assistant's event loop.
 
 ## mDNS discovery and firewall
 

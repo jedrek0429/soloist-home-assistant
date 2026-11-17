@@ -141,3 +141,42 @@ def dominant_colour_from_pixels(
 def rgb_from_hex(colour: str) -> tuple[int, int, int]:
     """Convert an extracted #rrggbb colour to Home Assistant RGB values."""
     return (int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16))
+
+
+def average_colour_from_pixels(
+    data: bytes | bytearray | memoryview | Sequence[int],
+    width: int,
+    height: int,
+) -> str | None:
+    """Alpha-weighted arithmetic mean in sRGB, without aesthetic correction."""
+    if width <= 0 or height <= 0 or len(data) < width * height * 4:
+        return None
+    totals = [0.0, 0.0, 0.0]
+    weight = 0.0
+    for i in range(0, width * height * 4, 4):
+        alpha = data[i + 3] / 255
+        weight += alpha
+        for channel in range(3):
+            totals[channel] += data[i + channel] * alpha
+    if not weight:
+        return None
+    return "#" + "".join(f"{floor(value / weight + 0.5):02x}" for value in totals)
+
+
+def lighting_colour_from_display(colour: str) -> str:
+    """Make the display accent richer for lighting, retaining its OKLCH hue.
+
+    Operates on the *final display colour*, never on independently selected
+    artwork pixels. Near-neutral colours remain neutral.
+    """
+    red, green, blue = rgb_from_hex(colour)
+    lightness, a, b = _to_oklab(red, green, blue)
+    chroma = hypot(a, b)
+    if chroma < 0.035:
+        return colour.lower()
+    hue = atan2(b, a)
+    # Stronger chroma for muted colours, with a smooth saturation ceiling.
+    # Darken moderately to reduce the washed-out appearance of RGB lighting.
+    target_chroma = _clamp(chroma * (1.0 + 0.75 * (1.0 - min(chroma / 0.25, 1.0))), chroma, 0.24)
+    target_lightness = _clamp(lightness - 0.075, 0.32, 0.78)
+    return _from_oklch(target_lightness, target_chroma, hue)

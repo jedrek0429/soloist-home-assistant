@@ -12,7 +12,7 @@ from PIL import Image, UnidentifiedImageError
 
 from homeassistant.core import HomeAssistant
 
-from .artwork_colour import dominant_colour_from_pixels
+from .artwork_colour import (average_colour_from_pixels, dominant_colour_from_pixels, lighting_colour_from_display)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def _is_spotify_artwork(url: str) -> bool:
         return False
 
 
-def _extract_image_colour(contents: bytes) -> str | None:
+def _extract_image_colour(contents: bytes) -> tuple[str, str, str] | None:
     """Decode and downsample artwork outside the HA event loop."""
 
     with Image.open(BytesIO(contents)) as original:
@@ -55,18 +55,20 @@ def _extract_image_colour(contents: bytes) -> str | None:
             Image.Resampling.BILINEAR,
         )
 
-        return dominant_colour_from_pixels(
-            image.tobytes(),
-            *IMAGE_SIZE,
-        )
+        pixels = image.tobytes()
+        display = dominant_colour_from_pixels(pixels, *IMAGE_SIZE)
+        average = average_colour_from_pixels(pixels, *IMAGE_SIZE)
+        if display is None or average is None:
+            return None
+        return (average, display, lighting_colour_from_display(display))
 
 
 async def async_artwork_colour(
     hass: HomeAssistant,
     session: ClientSession,
     url: str,
-) -> str | None:
-    """Return a hex colour for Spotify artwork."""
+) -> tuple[str, str, str] | None:
+    """Return average, display and lighting colours for Spotify artwork."""
 
     if not _is_spotify_artwork(url):
         _LOGGER.debug("Ignoring non-Spotify artwork URL")

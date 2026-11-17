@@ -59,6 +59,27 @@ class ArtworkColourTests(unittest.TestCase):
         self.assertEqual(result, colours.dominant_colour_from_pixels(pixels, 64, 64))
         self.assertRegex(result, r"^#[0-9a-f]{6}$")
 
+    def test_average_is_raw_pixel_mean(self) -> None:
+        pixels = bytes((255, 0, 0, 255, 0, 0, 255, 255))
+        self.assertEqual(colours.average_colour_from_pixels(pixels, 2, 1), "#800080")
+
+    def test_average_ignores_transparent_pixels(self) -> None:
+        pixels = bytes((255, 0, 0, 255, 0, 0, 255, 0))
+        self.assertEqual(colours.average_colour_from_pixels(pixels, 2, 1), "#ff0000")
+
+    def test_lighting_is_deterministic_and_more_chromatic(self) -> None:
+        original = "#7968a5"
+        lighting = colours.lighting_colour_from_display(original)
+        self.assertEqual(lighting, colours.lighting_colour_from_display(original))
+        l0, a0, b0 = colours._to_oklab(*colours.rgb_from_hex(original))
+        l1, a1, b1 = colours._to_oklab(*colours.rgb_from_hex(lighting))
+        self.assertLess(l1, l0)
+        self.assertGreater(colours.hypot(a1, b1), colours.hypot(a0, b0))
+        self.assertLess(abs(colours.atan2(b1, a1) - colours.atan2(b0, a0)), 0.08)
+
+    def test_lighting_preserves_neutral(self) -> None:
+        self.assertEqual(colours.lighting_colour_from_display("#888888"), "#888888")
+
     def test_rgb_parser(self) -> None:
         self.assertEqual(colours.rgb_from_hex("#a105ff"), (161, 5, 255))
 
