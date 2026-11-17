@@ -30,13 +30,12 @@ async def async_setup_entry(
 ) -> None:
     """Register the three colour sensors backed by one artwork subscription."""
     session = async_get_clientsession(hass)
-    sensors = [
-        SoloistArtworkColourSensor(entry, session, index)
-        for index in range(len(MODES))
+    source = SoloistArtworkColourSensor(entry, session, 0)
+    source._sensors = [source] + [
+        SoloistArtworkColourSensor(entry, session, index, source)
+        for index in range(1, len(MODES))
     ]
-    for sensor in sensors:
-        sensor._siblings = sensors
-    async_add_entities(sensors)
+    async_add_entities(source._sensors)
 
 
 class SoloistArtworkColourSensor(SensorEntity):
@@ -46,12 +45,12 @@ class SoloistArtworkColourSensor(SensorEntity):
     _attr_should_poll = False
     _attr_icon = "mdi:palette"
 
-    def __init__(self, entry: SoloistConfigEntry, session: ClientSession, index: int) -> None:
-        self._entry = entry
-        self._client: SoloistClient = entry.runtime_data
-        self._session = session
+    def __init__(
+        self, entry: SoloistConfigEntry, session: ClientSession,
+        index: int, source: SoloistArtworkColourSensor | None = None,
+    ) -> None:
         self._index = index
-        self._siblings: list[SoloistArtworkColourSensor] = []
+        self._source = source or self
         identifier = entry.unique_id or entry.entry_id
         self._attr_name = f"Album {MODES[index].lower()} colour"
         self._attr_unique_id = f"{identifier}_album_{MODES[index].lower()}_colour"
@@ -61,28 +60,36 @@ class SoloistArtworkColourSensor(SensorEntity):
             manufacturer="Soloist",
             model="Soloist",
         )
-        self._artwork_url: str | None = None
-        self._colours: tuple[str, str, str] | None = None
-        self._cache: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
-        self._task: asyncio.Task[None] | None = None
-        self._was_available = False
+        if source is None:
+            self._entry = entry
+            self._client: SoloistClient = entry.runtime_data
+            self._session = session
+            self._artwork_url: str | None = None
+            self._colours: tuple[str, str, str] | None = None
+            self._cache: OrderedDict[str, tuple[str, str, str]] = OrderedDict()
+            self._task: asyncio.Task[None] | None = None
+            self._was_available = False
+            self._sensors: list[SoloistArtworkColourSensor] = []
 
     @property
     def available(self) -> bool:
-        return self._client.connected and self._client.ready
+        client = self._source._client
+        return client.connected and client.ready
 
     @property
     def native_value(self) -> str | None:
-        colours = self._siblings[0]._colours
+        colours = self._source._colours
         return colours[self._index] if colours else None
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         colour = self.native_value
+        if not colour:
+            return {}
         return {
             "rgb_color": list(rgb_from_hex(colour)),
-            "artwork_url": self._siblings[0]._artwork_url,
-        } if colour else {}
+            "artwork_url": self._source._artwork_url,
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -102,7 +109,7 @@ class SoloistArtworkColourSensor(SensorEntity):
 
     @callback
     def _publish(self) -> None:
-        for sensor in self._siblings:
+        for sensor in self._sensors:
             if sensor.hass is not None:
                 sensor.async_write_ha_state()
 
